@@ -1,13 +1,72 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// A person who books appointments.
+model Customer {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  email        String        @unique
+  name         String
+  phone        String?
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
+  appointments Appointment[]
+}
+
+// A person (or resource) who can be booked, e.g. a stylist or doctor.
+model Provider {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  name         String
+  email        String        @unique
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
+  appointments Appointment[]
+}
+
+// Something that can be booked, e.g. "30 min consultation".
+model Service {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  name            String
+  durationMinutes Int
+  priceCents      Int           @default(0)
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+  appointments    Appointment[]
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+// Overlap protection lives in the database, not here: see the
+// "appointment_no_overlap" exclusion constraint in the init migration.
+model Appointment {
+  id         String            @id @default(uuid(7)) @db.Uuid
+  providerId String            @db.Uuid
+  customerId String            @db.Uuid
+  serviceId  String            @db.Uuid
+  startsAt   DateTime          @db.Timestamptz(6)
+  endsAt     DateTime          @db.Timestamptz(6)
+  status     AppointmentStatus @default(PENDING)
+  notes      String?
+  createdAt  DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime          @updatedAt @db.Timestamptz(6)
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@index([providerId, startsAt])
+  @@index([customerId, startsAt])
 }

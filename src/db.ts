@@ -1,4 +1,7 @@
-import pg from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from './generated/prisma/client.js';
 import { config } from './config.js';
 
-export const pool = new pg.Pool({ connectionString: config.databaseUrl });
+export const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: config.databaseUrl }),
+});
