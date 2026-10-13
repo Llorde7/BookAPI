@@ -35,17 +35,46 @@ Unpaid bookings are holds (`src/appointments.ts`):
 - When the timer runs out the hold becomes `EXPIRED` and the slot is free again.
   This happens lazily on every booking call, so no cron job is required.
   `releaseExpiredHolds()` can also be run on a schedule to keep statuses tidy.
-- `confirmHold` (holder pays) and `bookAndPay` (anyone pays) mark the booking
-  `CONFIRMED`. If another customer only holds the slot unpaid, their hold becomes
-  `BUMPED` and the slot goes to the payer. A paid slot can never be taken.
+- When someone pays, the booking becomes `CONFIRMED`. If another customer only
+  holds the slot unpaid, their hold becomes `BUMPED` and the slot goes to the
+  payer. A paid slot can never be taken. An expired holder who pays late still
+  wins, unless someone else has paid for the slot in the meantime.
 - Failures raise `SlotTakenError` (slot is paid or held by someone else) or
-  `AppointmentStateError` (e.g. confirming a `BUMPED` appointment). Map these to
-  HTTP 409 and notify bumped customers.
+  `AppointmentStateError` (e.g. paying for a `BUMPED` hold). Map these to HTTP 409
+  and notify bumped customers in the app.
 
 All booking writes for one provider are serialized with a Postgres advisory lock,
-so simultaneous payers cannot deadlock. There is no payment integration yet:
-`CONFIRMED` means "paid", and callers should invoke `confirmHold`/`bookAndPay`
-only after payment succeeds.
+so simultaneous payers cannot deadlock.
+
+## Payments (authorize, then capture)
+
+`src/payments/service.ts`. `CONFIRMED` means "paid". Never call `confirmHold` or
+`bookConfirmed` directly from a route; go through these:
+
+- `payForHold({ appointmentId, customerId, paymentToken })`: the holder pays.
+- `payAndBook({ providerId, customerId, serviceId, startsAt, paymentToken })`: anyone pays.
+
+Each does three steps:
+
+1. **Authorize** the card (reserve the money). Declined: nothing else happens.
+2. **Book**: confirm the slot and link the `Payment` row in one DB transaction.
+3. **Capture** (charge) only after the booking succeeded.
+
+If two customers pay at the same moment, whoever reaches the database first gets the
+slot. The other loses at step 2, their authorization is **voided**, and they are never
+charged, so there is nothing to refund. They get `SlotTakenError` (or
+`AppointmentStateError` if they were a holder who just got bumped).
+
+If capture fails after booking, the booking is cancelled (`PaymentCaptureError`),
+so nobody gets a free appointment. If the server crashes between steps, an
+`AUTHORIZED` payment is left behind; run `reconcilePayments()` on a schedule
+(for example every 10 minutes) to capture or void it. Free services (`priceCents = 0`)
+skip payment entirely. The price always comes from the database, never from the caller.
+
+The provider is a dummy (`src/payments/fakeGateway.ts`, in memory) behind a small
+`PaymentGateway` interface. Payment tokens choose the outcome: `tok_ok`,
+`tok_declined`, `tok_capture_fails`. To use a real provider, implement the interface.
+Real providers also expect an idempotency key on each call; the dummy does not.
 
 ## Scripts
 

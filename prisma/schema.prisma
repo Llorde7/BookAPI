@@ -16,6 +16,7 @@ model Customer {
   createdAt    DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
   appointments Appointment[]
+  payments     Payment[]
 }
 
 // A person (or resource) who can be booked, e.g. a stylist or doctor.
@@ -69,10 +70,39 @@ model Appointment {
   createdAt     DateTime          @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
 
-  provider Provider @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  provider Provider  @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  service  Service   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  payments Payment[]
 
   @@index([providerId, startsAt])
   @@index([customerId, startsAt])
+}
+
+enum PaymentStatus {
+  AUTHORIZED // funds reserved on the card, not charged yet
+  CAPTURED // charged
+  VOIDED // reservation released, customer never charged
+  FAILED // capture failed after the booking was confirmed; booking was cancelled
+}
+
+// Authorize-then-capture: the card is authorized first, the booking is confirmed
+// second, and the money is captured only if the booking succeeded.
+model Payment {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  customerId    String        @db.Uuid
+  // Linked in the same transaction that confirms the booking.
+  appointmentId String?       @db.Uuid
+  amountCents   Int
+  status        PaymentStatus @default(AUTHORIZED)
+  // The payment provider's authorization id.
+  providerRef   String        @unique
+  createdAt     DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(6)
+
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  @@index([appointmentId])
+  @@index([status, createdAt])
 }

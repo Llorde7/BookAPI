@@ -1,4 +1,4 @@
-import { Prisma } from './generated/prisma/client.js';
+import { Prisma, type Appointment } from './generated/prisma/client.js';
 import { config } from './config.js';
 import { prisma } from './db.js';
 
@@ -11,6 +11,10 @@ export class SlotTakenError extends Error {
 }
 
 export class AppointmentStateError extends Error {}
+
+// Runs inside the same transaction that confirms the booking, so anything it
+// writes (e.g. linking a payment) is saved or lost together with the booking.
+export type OnConfirmed = (tx: Tx, appointment: Appointment) => Promise<void>;
 
 interface SlotInput {
   providerId: string;
@@ -100,9 +104,10 @@ export function createHold(input: SlotInput) {
   });
 }
 
-// The holder pays for their own hold. Also works if the hold just expired, as
-// long as nobody else has taken the slot in the meantime.
-export async function confirmHold(appointmentId: string) {
+// Mark a hold CONFIRMED (paid). Call only after the payment is authorized: see
+// payments/service.ts. Also works if the hold just expired, as long as nobody
+// else has taken the slot in the meantime.
+export async function confirmHold(appointmentId: string, onConfirmed?: OnConfirmed) {
   const existing = await prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
   return withProviderLock(existing.providerId, async (tx) => {
     await releaseExpiredHolds(tx, existing.providerId);
@@ -111,21 +116,26 @@ export async function confirmHold(appointmentId: string) {
       throw new AppointmentStateError(`Cannot confirm a ${appt.status} appointment`);
     }
     await bumpUnpaidHolds(tx, appt.providerId, appt.startsAt, appt.endsAt, appt.id);
-    return tx.appointment.update({
+    const confirmed = await tx.appointment.update({
       where: { id: appt.id },
       data: { status: 'CONFIRMED', holdExpiresAt: null },
     });
+    await onConfirmed?.(tx, confirmed);
+    return confirmed;
   });
 }
 
-// Book and pay in one step. Any unpaid hold on the slot is given to this customer.
-export function bookAndPay(input: SlotInput) {
+// Create a CONFIRMED (paid) booking directly. Any unpaid hold on the slot is
+// given to this customer. Call only after the payment is authorized.
+export function bookConfirmed(input: SlotInput, onConfirmed?: OnConfirmed) {
   return withProviderLock(input.providerId, async (tx) => {
     await releaseExpiredHolds(tx, input.providerId);
     const { startsAt, endsAt } = await slotRange(tx, input);
     await bumpUnpaidHolds(tx, input.providerId, startsAt, endsAt);
-    return tx.appointment.create({
+    const created = await tx.appointment.create({
       data: { ...input, startsAt, endsAt, status: 'CONFIRMED' },
     });
+    await onConfirmed?.(tx, created);
+    return created;
   });
 }
