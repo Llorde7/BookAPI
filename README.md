@@ -87,8 +87,10 @@ access token (`src/auth/`).
 | Endpoint              | Purpose                                                                               |
 | --------------------- | ------------------------------------------------------------------------------------- |
 | `POST /auth/register` | `{ email, password, name, phone? }` creates an account; returns `{ id, email }` (201) |
-| `POST /auth/login`    | `{ email, password }` returns `{ accessToken, tokenType, expiresIn }`                 |
-| `GET /auth/me`        | Needs `Authorization: Bearer <token>`; returns `{ customer }`                         |
+| `POST /auth/login`    | `{ email, password }` returns `{ accessToken, tokenType, expiresIn, refreshToken }`   |
+| `POST /auth/refresh`  | `{ refreshToken }` returns a new access token **and a new refresh token**             |
+| `POST /auth/logout`   | `{ refreshToken }` ends that session; always `204`                                    |
+| `GET /auth/me`        | Needs `Authorization: Bearer <accessToken>`; returns `{ customer }`                   |
 
 ```sh
 curl -X POST localhost:3000/auth/register -H 'content-type: application/json' \
@@ -110,14 +112,28 @@ curl -X POST localhost:3000/auth/login -H 'content-type: application/json' \
   secret of at least 32 characters. Generate one with `openssl rand -base64 48`.
 - Login and register are rate limited per IP (`AUTH_RATE_LIMIT_MAX`, default 20 per
   15 minutes). Behind a reverse proxy, set Express's `trust proxy` so real client IPs are used.
-- There is **no refresh token yet** (log in again after 15 minutes), and tokens cannot be
-  revoked before they expire.
+- **Refresh tokens** are 256 random bits (not JWTs) valid for 30 days
+  (`REFRESH_TOKEN_TTL_DAYS`, 1 to 90). Only their SHA-256 hash is stored. Every use
+  **rotates** the token: the old one is revoked and a new one issued.
+- **Reuse detection:** presenting a refresh token that was already used or logged out
+  revokes **all** of that customer's sessions and returns 401, because it may have been
+  stolen. All refresh failures return the same `invalid_refresh_token` response.
+- When an access token expires, `requireAuth` answers `401 token_expired` (an invalid or
+  forged one gets `invalid_token`), so a client knows to call `/auth/refresh` instead of
+  asking the user to log in again.
+- **Logout does not revoke the access token already issued**; it stays valid until it
+  expires (15 minutes by default).
+- Two requests refreshing with the same token at the same moment (two browser tabs, an app
+  resuming) look like reuse and log the user out everywhere. Have clients serialize refreshes.
+- Tokens travel in the JSON body; a browser frontend should prefer an httpOnly cookie.
+- Expired refresh tokens are not deleted automatically yet (the `expiresAt` index is
+  ready for a cleanup job).
 - The seed's customers use a placeholder hash, so they **cannot log in**. Register a new
   account to try it. Registering with an email that already exists is refused, even for
   guest bookings, because there is no email verification to prove ownership.
 - Errors go through one helper (`src/errors.ts`): `throw new HttpError(status, code, message)`.
   Validation errors become `400`, and unexpected errors become a generic `500` that leaks nothing.
-- Not built: email verification, password reset, account lockout, refresh tokens.
+- Not built: email verification, password reset, account lockout, logout-everywhere.
 
 ## Tests
 

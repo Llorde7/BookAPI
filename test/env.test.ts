@@ -65,6 +65,21 @@ describe('loadAuthEnv (JWT_SECRET validation)', () => {
     }
   });
 
+  it('validates the refresh token lifetime: whole days between 1 and 90, default 30', () => {
+    assert.equal(loadAuthEnv({ JWT_SECRET: SECRET }).REFRESH_TOKEN_TTL_DAYS, 30);
+    for (const bad of ['0', '91', '1.5', 'abc', '']) {
+      assert.throws(
+        () => loadAuthEnv({ JWT_SECRET: SECRET, REFRESH_TOKEN_TTL_DAYS: bad }),
+        /REFRESH_TOKEN_TTL_DAYS/,
+        `days=${bad}`,
+      );
+    }
+    assert.equal(
+      loadAuthEnv({ JWT_SECRET: SECRET, REFRESH_TOKEN_TTL_DAYS: '90' }).REFRESH_TOKEN_TTL_DAYS,
+      90,
+    );
+  });
+
   it('reports every problem at once', () => {
     assert.throws(
       () => loadAuthEnv({ JWT_SECRET: 'short', ACCESS_TOKEN_TTL_SECONDS: '99999' }),

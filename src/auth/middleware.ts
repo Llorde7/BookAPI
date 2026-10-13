@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import jwt from 'jsonwebtoken';
 import { HttpError } from '../errors.js';
 import { verifyAccessToken } from './tokens.js';
 
@@ -21,9 +22,15 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
   }
   try {
     req.auth = verifyAccessToken(token);
-  } catch {
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) {
+      // A different code from "invalid" so a client knows to call /auth/refresh
+      // instead of sending the user back to the login screen.
+      res.set('WWW-Authenticate', 'Bearer error="invalid_token", error_description="expired"');
+      throw new HttpError(401, 'token_expired', 'Access token expired');
+    }
     res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
-    throw new HttpError(401, 'invalid_token', 'Invalid or expired access token');
+    throw new HttpError(401, 'invalid_token', 'Invalid access token');
   }
   next();
 };

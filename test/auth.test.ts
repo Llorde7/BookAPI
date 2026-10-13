@@ -327,7 +327,9 @@ describe('access tokens on GET /auth/me', () => {
     assert.equal(none.headers.get('www-authenticate'), 'Bearer');
     assert.equal((await me(token, 'Basic')).status, 401);
     assert.equal((await me('', 'Bearer')).status, 401);
-    assert.equal((await me('abc.def.ghi')).status, 401);
+    const bad = await me('abc.def.ghi');
+    assert.equal(bad.status, 401);
+    assert.equal(bad.json.error, 'invalid_token');
     assert.equal((await me('not-a-jwt')).status, 401);
     assert.equal((await call('GET', '/auth/me', undefined, { authorization: token })).status, 401);
   });
@@ -406,7 +408,8 @@ describe('access tokens on GET /auth/me', () => {
     });
     const r = await me(t);
     assert.equal(r.status, 401);
-    assert.equal(r.json.error, 'invalid_token');
+    assert.equal(r.json.error, 'token_expired');
+    assert.match(r.headers.get('www-authenticate') ?? '', /expired/);
   });
 
   it('a short-lived token works, then stops working after it expires', async () => {

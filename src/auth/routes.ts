@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { config } from '../config.js';
@@ -6,6 +6,7 @@ import { prisma } from '../db.js';
 import { getAuthEnv } from '../env.js';
 import { HttpError } from '../errors.js';
 import { requireAuth } from './middleware.js';
+import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken } from './refreshTokens.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { signAccessToken } from './tokens.js';
 
@@ -19,6 +20,9 @@ const registerBody = z.object({
   name: z.string().trim().min(1).max(100),
   phone: z.string().trim().min(1).max(30).optional(),
 });
+
+// Our refresh tokens are 43 characters; the cap just stops oversized input.
+const refreshBody = z.object({ refreshToken: z.string().min(1).max(512) });
 
 const loginBody = z.object({ email, password: z.string().min(1).max(128) });
 
@@ -38,6 +42,17 @@ const authLimiter = rateLimit({
 function isUniqueViolation(err: unknown): boolean {
   const text = JSON.stringify(err, Object.getOwnPropertyNames(Object(err)));
   return (err as { code?: unknown } | null)?.code === 'P2002' || text.includes('23505');
+}
+
+// The response shape shared by login and refresh.
+function sendTokens(res: Response, customerId: string, refreshToken: string) {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    accessToken: signAccessToken(customerId),
+    tokenType: 'Bearer',
+    expiresIn: getAuthEnv().ACCESS_TOKEN_TTL_SECONDS,
+    refreshToken,
+  });
 }
 
 export const authRouter = Router();
@@ -70,13 +85,25 @@ authRouter.post('/login', authLimiter, async (req, res) => {
     // Same answer for "no such email" and "wrong password".
     throw new HttpError(401, 'invalid_credentials', 'Invalid credentials');
   }
-  const accessToken = signAccessToken(customer.id);
-  res.set('Cache-Control', 'no-store');
-  res.json({
-    accessToken,
-    tokenType: 'Bearer',
-    expiresIn: getAuthEnv().ACCESS_TOKEN_TTL_SECONDS,
-  });
+  const refreshToken = await issueRefreshToken(prisma, customer.id);
+  sendTokens(res, customer.id, refreshToken);
+});
+
+// Trade a refresh token for a new access token and a NEW refresh token. The old
+// refresh token is dead afterwards; replaying it ends all of that customer's sessions.
+authRouter.post('/refresh', async (req, res) => {
+  const { refreshToken } = refreshBody.parse(req.body);
+  const rotated = await rotateRefreshToken(refreshToken);
+  sendTokens(res, rotated.customerId, rotated.refreshToken);
+});
+
+// Ends one session. Needs only the refresh token (the access token may have expired).
+// Always 204, so it cannot be used to test whether a token exists.
+// The access token already issued stays valid until it expires (15 minutes by default).
+authRouter.post('/logout', async (req, res) => {
+  const { refreshToken } = refreshBody.parse(req.body);
+  await revokeRefreshToken(refreshToken);
+  res.status(204).end();
 });
 
 // Who am I? Also proves the token works.

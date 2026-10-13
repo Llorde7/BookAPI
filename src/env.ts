@@ -16,6 +16,8 @@ const authEnvSchema = z
       .min(1)
       .max(3600)
       .default(15 * 60),
+    // Refresh tokens last much longer so users stay logged in: default 30 days, max 90.
+    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.JWT_SECRET === JWT_SECRET_PLACEHOLDER) {
