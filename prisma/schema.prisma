@@ -47,21 +47,27 @@ enum AppointmentStatus {
   CANCELLED
   COMPLETED
   NO_SHOW
+  EXPIRED // unpaid hold ran out of time
+  BUMPED // unpaid hold given to a customer who paid for the slot
 }
 
+// PENDING = unpaid hold on the slot, valid until holdExpiresAt. CONFIRMED = paid.
 // Overlap protection lives in the database, not here: see the
-// "appointment_no_overlap" exclusion constraint in the init migration.
+// "appointment_no_overlap" exclusion constraint in the migrations. It covers
+// PENDING, CONFIRMED, COMPLETED and NO_SHOW; the other statuses free the slot.
 model Appointment {
-  id         String            @id @default(uuid(7)) @db.Uuid
-  providerId String            @db.Uuid
-  customerId String            @db.Uuid
-  serviceId  String            @db.Uuid
-  startsAt   DateTime          @db.Timestamptz(6)
-  endsAt     DateTime          @db.Timestamptz(6)
-  status     AppointmentStatus @default(PENDING)
-  notes      String?
-  createdAt  DateTime          @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime          @updatedAt @db.Timestamptz(6)
+  id            String            @id @default(uuid(7)) @db.Uuid
+  providerId    String            @db.Uuid
+  customerId    String            @db.Uuid
+  serviceId     String            @db.Uuid
+  startsAt      DateTime          @db.Timestamptz(6)
+  endsAt        DateTime          @db.Timestamptz(6)
+  status        AppointmentStatus @default(PENDING)
+  // Only set while PENDING. After this time the hold is released (EXPIRED).
+  holdExpiresAt DateTime?         @db.Timestamptz(6)
+  notes         String?
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
 
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Restrict)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
