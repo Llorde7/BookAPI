@@ -2,6 +2,8 @@
 
 Appointment booking API built with TypeScript, Express, Prisma and PostgreSQL.
 
+**Why it is built this way, and what is still weak:** see [docs/DESIGN.md](docs/DESIGN.md).
+
 ## Setup
 
 ```sh
