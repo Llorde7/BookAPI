@@ -19,6 +19,9 @@ npm run dev         # http://localhost:3000/health
 - **Service**: what is booked, with a duration and price.
 - **Appointment**: a provider + customer + service over a time range, with a status
   (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`, `NO_SHOW`).
+- **Payment**: an authorization / charge linked to an appointment.
+- **RefreshToken**: a stored hash of a long-lived login token, belonging to a customer.
+  Deleted along with its customer. The refresh endpoint is not built yet.
 
 ## Double-booking and holds
 

@@ -9,16 +9,17 @@ datasource db {
 
 // A person who books appointments.
 model Customer {
-  id           String        @id @default(uuid(7)) @db.Uuid
-  email        String        @unique
-  name         String
-  phone        String?
+  id            String         @id @default(uuid(7)) @db.Uuid
+  email         String         @unique
+  name          String
+  phone         String?
   // Null for guests who booked without an account.
-  passwordHash String?
-  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
-  appointments Appointment[]
-  payments     Payment[]
+  passwordHash  String?
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(6)
+  appointments  Appointment[]
+  payments      Payment[]
+  refreshTokens RefreshToken[]
 }
 
 // A person (or resource) who can be booked, e.g. a stylist or doctor.
@@ -107,4 +108,26 @@ model Payment {
 
   @@index([appointmentId])
   @@index([status, createdAt])
+}
+
+// Long-lived login token that can be exchanged for a new short-lived access token.
+// Only a SHA-256 hash of the token is stored, so a database leak does not leak
+// usable tokens. The token itself is shown to the client once and never saved.
+model RefreshToken {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  customerId String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamptz(6)
+  // Set when the token is used (rotation), logged out, or revoked. Never deleted
+  // on use, so a replayed old token can be recognised.
+  revokedAt  DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+
+  // Cascade (unlike the other relations, which Restrict): tokens are disposable, and
+  // Restrict would make every customer who ever logged in impossible to delete.
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([expiresAt])
 }
