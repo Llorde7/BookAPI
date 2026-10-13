@@ -20,7 +20,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
     throw new HttpError(401, 'unauthorized', 'Missing access token');
   }
   try {
-    req.auth = await verifyAccessToken(token);
+    req.auth = verifyAccessToken(token);
   } catch {
     res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
     throw new HttpError(401, 'invalid_token', 'Invalid or expired access token');

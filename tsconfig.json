@@ -14,5 +14,5 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["src", "prisma/seed.ts", "eslint.config.js"]
+  "include": ["src", "test", "prisma/seed.ts", "eslint.config.js"]
 }

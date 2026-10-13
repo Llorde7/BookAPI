@@ -2,21 +2,16 @@ import type { Appointment, Payment } from '../generated/prisma/client.js';
 import {
   bookConfirmed,
   confirmHold,
+  pickSlot,
   AppointmentStateError,
   type OnConfirmed,
+  type SlotInput,
 } from '../appointments.js';
 import { prisma } from '../db.js';
 import { FakeGateway } from './fakeGateway.js';
 import { PaymentCaptureError, type PaymentGateway } from './gateway.js';
 
 export const defaultGateway: PaymentGateway = new FakeGateway();
-
-interface SlotInput {
-  providerId: string;
-  customerId: string;
-  serviceId: string;
-  startsAt: Date;
-}
 
 export interface PayResult {
   appointment: Appointment;
@@ -126,7 +121,8 @@ export function payAndBook(
   input: SlotInput & { paymentToken: string },
   gateway: PaymentGateway = defaultGateway,
 ) {
-  const { paymentToken, ...slot } = input;
+  const slot = pickSlot(input);
+  const { paymentToken } = input;
   return authorizeBookCapture(gateway, {
     customerId: slot.customerId,
     serviceId: slot.serviceId,

@@ -1,8 +1,15 @@
 import { app } from './app.js';
-import { config, getJwtSecret } from './config.js';
+import { config } from './config.js';
 import { prisma } from './db.js';
+import { getAuthEnv } from './env.js';
 
-getJwtSecret(); // fail fast on a missing or weak secret
+// Refuse to boot on a missing or weak JWT_SECRET instead of failing on the first login.
+try {
+  getAuthEnv();
+} catch (err) {
+  console.error((err as Error).message);
+  process.exit(1);
+}
 
 const server = app.listen(config.port, () => {
   console.log(`BookAPI listening on :${config.port}`);

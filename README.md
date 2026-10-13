@@ -81,11 +81,11 @@ Real providers also expect an idempotency key on each call; the dummy does not.
 Customers register with an email and password and log in to get a short-lived JWT
 access token (`src/auth/`).
 
-| Endpoint              | Purpose                                                               |
-| --------------------- | --------------------------------------------------------------------- |
-| `POST /auth/register` | `{ email, password, name, phone? }` creates an account (201)          |
-| `POST /auth/login`    | `{ email, password }` returns `{ accessToken, tokenType, expiresIn }` |
-| `GET /auth/me`        | Needs `Authorization: Bearer <token>`; returns the account            |
+| Endpoint              | Purpose                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| `POST /auth/register` | `{ email, password, name, phone? }` creates an account; returns `{ id, email }` (201) |
+| `POST /auth/login`    | `{ email, password }` returns `{ accessToken, tokenType, expiresIn }`                 |
+| `GET /auth/me`        | Needs `Authorization: Bearer <token>`; returns `{ customer }`                         |
 
 ```sh
 curl -X POST localhost:3000/auth/register -H 'content-type: application/json' \
@@ -94,22 +94,41 @@ curl -X POST localhost:3000/auth/login -H 'content-type: application/json' \
   -d '{"email":"me@example.com","password":"a long passphrase"}'
 ```
 
+- Emails are trimmed and lowercased before saving and before lookup.
 - Passwords are hashed with **Argon2id** (parameters live inside each hash). Length is
-  8 to 128 characters; there are no composition rules.
-- Tokens are **HS256 JWTs** that expire after 15 minutes (`ACCESS_TOKEN_TTL_SECONDS`,
-  capped at 1 hour). Only the customer id is inside. The issuer, audience, algorithm and
-  expiry are all checked on every request.
-- There is **no refresh token yet**: clients log in again when the token expires. Tokens
-  cannot be revoked before they expire.
-- `JWT_SECRET` is required and the server will not start without 32+ characters.
-  Generate one with `openssl rand -base64 48`.
+  8 to 128 characters; there are no composition rules and passwords are never trimmed.
+- Tokens are **HS256 JWTs** (`jsonwebtoken`) that expire after 15 minutes
+  (`ACCESS_TOKEN_TTL_SECONDS`, 1 to 3600). Only the customer id is inside. The issuer,
+  audience, algorithm and expiry are checked on every request; tokens without an expiry are refused.
+- A wrong password and an unknown email both return `401 { "error": "invalid_credentials",
+"message": "Invalid credentials" }` and take about the same time.
+- `JWT_SECRET` is **required**. It is validated with Zod at startup
+  (`src/env.ts`): the server prints what is wrong and exits instead of booting without a
+  secret of at least 32 characters. Generate one with `openssl rand -base64 48`.
 - Login and register are rate limited per IP (`AUTH_RATE_LIMIT_MAX`, default 20 per
   15 minutes). Behind a reverse proxy, set Express's `trust proxy` so real client IPs are used.
-- Wrong password and unknown email give the same response and take about the same time.
+- There is **no refresh token yet** (log in again after 15 minutes), and tokens cannot be
+  revoked before they expire.
 - The seed's customers use a placeholder hash, so they **cannot log in**. Register a new
   account to try it. Registering with an email that already exists is refused, even for
   guest bookings, because there is no email verification to prove ownership.
+- Errors go through one helper (`src/errors.ts`): `throw new HttpError(status, code, message)`.
+  Validation errors become `400`, and unexpected errors become a generic `500` that leaks nothing.
 - Not built: email verification, password reset, account lockout, refresh tokens.
+
+## Tests
+
+`npm test` runs everything (about 100 tests: startup config, error helper, register, login,
+token attacks, rate limiting, holds, payments and the database rules). The tests **delete all
+data**, so they only run against a database whose name contains `test`; anything else is refused.
+
+```sh
+npm run db:up
+npm run test:db:create    # once: creates the bookapi_test database in the Docker container
+export TEST_DATABASE_URL=postgres://bookapi:bookapi@localhost:5432/bookapi_test
+npm run test:db:migrate   # whenever migrations change
+npm test
+```
 
 ## Scripts
 

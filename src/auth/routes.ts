@@ -3,6 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
+import { getAuthEnv } from '../env.js';
 import { HttpError } from '../errors.js';
 import { requireAuth } from './middleware.js';
 import { hashPassword, verifyPassword } from './password.js';
@@ -47,9 +48,9 @@ authRouter.post('/register', authLimiter, async (req, res) => {
   try {
     const customer = await prisma.customer.create({
       data: { email: body.email, name: body.name, phone: body.phone, passwordHash },
-      select: publicCustomer,
+      select: { id: true, email: true },
     });
-    res.status(201).json({ customer });
+    res.status(201).json(customer);
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new HttpError(409, 'email_taken', 'An account with this email already exists');
@@ -67,11 +68,15 @@ authRouter.post('/login', authLimiter, async (req, res) => {
   const valid = await verifyPassword(customer?.passwordHash, body.password);
   if (!customer || !valid) {
     // Same answer for "no such email" and "wrong password".
-    throw new HttpError(401, 'invalid_credentials', 'Invalid email or password');
+    throw new HttpError(401, 'invalid_credentials', 'Invalid credentials');
   }
-  const accessToken = await signAccessToken(customer.id);
+  const accessToken = signAccessToken(customer.id);
   res.set('Cache-Control', 'no-store');
-  res.json({ accessToken, tokenType: 'Bearer', expiresIn: config.accessTokenTtlSeconds });
+  res.json({
+    accessToken,
+    tokenType: 'Bearer',
+    expiresIn: getAuthEnv().ACCESS_TOKEN_TTL_SECONDS,
+  });
 });
 
 // Who am I? Also proves the token works.

@@ -16,11 +16,18 @@ export class AppointmentStateError extends Error {}
 // writes (e.g. linking a payment) is saved or lost together with the booking.
 export type OnConfirmed = (tx: Tx, appointment: Appointment) => Promise<void>;
 
-interface SlotInput {
+export interface SlotInput {
   providerId: string;
   customerId: string;
   serviceId: string;
   startsAt: Date;
+}
+
+// Copies only the fields a caller is allowed to choose. Anything else on the object
+// (id, status, notes, an amount...) is dropped instead of flowing into the database.
+export function pickSlot(input: SlotInput): SlotInput {
+  const { providerId, customerId, serviceId, startsAt } = input;
+  return { providerId, customerId, serviceId, startsAt };
 }
 
 // The database constraint is the real guard. This recognises its error however
@@ -91,7 +98,8 @@ async function slotRange(tx: Tx, input: SlotInput) {
 }
 
 // Reserve a slot without paying. Holds it for HOLD_MINUTES (never past the start time).
-export function createHold(input: SlotInput) {
+export function createHold(raw: SlotInput) {
+  const input = pickSlot(raw);
   return withProviderLock(input.providerId, async (tx) => {
     await releaseExpiredHolds(tx, input.providerId);
     const { startsAt, endsAt } = await slotRange(tx, input);
@@ -127,7 +135,8 @@ export async function confirmHold(appointmentId: string, onConfirmed?: OnConfirm
 
 // Create a CONFIRMED (paid) booking directly. Any unpaid hold on the slot is
 // given to this customer. Call only after the payment is authorized.
-export function bookConfirmed(input: SlotInput, onConfirmed?: OnConfirmed) {
+export function bookConfirmed(raw: SlotInput, onConfirmed?: OnConfirmed) {
+  const input = pickSlot(raw);
   return withProviderLock(input.providerId, async (tx) => {
     await releaseExpiredHolds(tx, input.providerId);
     const { startsAt, endsAt } = await slotRange(tx, input);
