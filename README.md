@@ -76,6 +76,41 @@ The provider is a dummy (`src/payments/fakeGateway.ts`, in memory) behind a smal
 `tok_declined`, `tok_capture_fails`. To use a real provider, implement the interface.
 Real providers also expect an idempotency key on each call; the dummy does not.
 
+## Authentication
+
+Customers register with an email and password and log in to get a short-lived JWT
+access token (`src/auth/`).
+
+| Endpoint              | Purpose                                                               |
+| --------------------- | --------------------------------------------------------------------- |
+| `POST /auth/register` | `{ email, password, name, phone? }` creates an account (201)          |
+| `POST /auth/login`    | `{ email, password }` returns `{ accessToken, tokenType, expiresIn }` |
+| `GET /auth/me`        | Needs `Authorization: Bearer <token>`; returns the account            |
+
+```sh
+curl -X POST localhost:3000/auth/register -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"a long passphrase","name":"Me"}'
+curl -X POST localhost:3000/auth/login -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"a long passphrase"}'
+```
+
+- Passwords are hashed with **Argon2id** (parameters live inside each hash). Length is
+  8 to 128 characters; there are no composition rules.
+- Tokens are **HS256 JWTs** that expire after 15 minutes (`ACCESS_TOKEN_TTL_SECONDS`,
+  capped at 1 hour). Only the customer id is inside. The issuer, audience, algorithm and
+  expiry are all checked on every request.
+- There is **no refresh token yet**: clients log in again when the token expires. Tokens
+  cannot be revoked before they expire.
+- `JWT_SECRET` is required and the server will not start without 32+ characters.
+  Generate one with `openssl rand -base64 48`.
+- Login and register are rate limited per IP (`AUTH_RATE_LIMIT_MAX`, default 20 per
+  15 minutes). Behind a reverse proxy, set Express's `trust proxy` so real client IPs are used.
+- Wrong password and unknown email give the same response and take about the same time.
+- The seed's customers use a placeholder hash, so they **cannot log in**. Register a new
+  account to try it. Registering with an email that already exists is refused, even for
+  guest bookings, because there is no email verification to prove ownership.
+- Not built: email verification, password reset, account lockout, refresh tokens.
+
 ## Scripts
 
 | Script                            | Purpose                             |

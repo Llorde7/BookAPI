@@ -1,6 +1,8 @@
 import { app } from './app.js';
-import { config } from './config.js';
+import { config, getJwtSecret } from './config.js';
 import { prisma } from './db.js';
+
+getJwtSecret(); // fail fast on a missing or weak secret
 
 const server = app.listen(config.port, () => {
   console.log(`BookAPI listening on :${config.port}`);
