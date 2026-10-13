@@ -211,6 +211,15 @@ bypasses. Several security features were also broken on purpose, by hand, to con
 **Prisma 7:** `migrate dev` does not regenerate the client. `npm install` does, through the
 `postinstall` script.
 
+**The docs are updated with every change, in the same commit** (rule in
+[`CLAUDE.md`](../CLAUDE.md)). The README covers how to use the project and this file covers
+why it is built this way.
+
+- _Rejected:_ writing docs at release time. They drift, and the reasons behind a decision
+  are easiest to state while the decision is being made. The first draft of this file got
+  three facts wrong when written from memory, which is why the rule also says to check
+  the code.
+
 ## Weaknesses and known gaps
 
 Ordered roughly by how much they matter.
@@ -254,3 +263,6 @@ Ordered roughly by how much they matter.
     before their real date). This was tested and causes no problem; Prisma applies later-
     generated migrations regardless of name order. They were left alone because renaming a
     migration that may already be applied would break that database.
+19. **The docs rule is a convention, not enforcement.** Nothing fails if a commit changes
+    code and skips the docs. A CI check could require a docs change alongside source changes,
+    but it would also force empty edits on pure refactors, so it was not added.
