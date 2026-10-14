@@ -1,5 +1,6 @@
 import express from 'express';
 import { authRouter } from './auth/routes.js';
+import { bookingsRouter } from './bookings/routes.js';
 import { prisma } from './db.js';
 import { errorHandler, notFound } from './errors.js';
 
@@ -18,6 +19,7 @@ app.get('/health', async (_req, res) => {
 });
 
 app.use('/auth', authRouter);
+app.use('/bookings', bookingsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

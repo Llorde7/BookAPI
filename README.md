@@ -86,13 +86,15 @@ Real providers also expect an idempotency key on each call; the dummy does not.
 Customers register with an email and password and log in to get a short-lived JWT
 access token (`src/auth/`).
 
-| Endpoint              | Purpose                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------- |
-| `POST /auth/register` | `{ email, password, name, phone? }` creates an account; returns `{ id, email }` (201) |
-| `POST /auth/login`    | `{ email, password }` returns `{ accessToken, tokenType, expiresIn, refreshToken }`   |
-| `POST /auth/refresh`  | `{ refreshToken }` returns a new access token **and a new refresh token**             |
-| `POST /auth/logout`   | `{ refreshToken }` ends that session; always `204`                                    |
-| `GET /auth/me`        | Needs `Authorization: Bearer <accessToken>`; returns `{ customer }`                   |
+| Endpoint              | Purpose                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `POST /auth/register` | `{ email, password, name, phone? }` creates an account; returns `{ id, email }` (201)                                   |
+| `POST /auth/login`    | `{ email, password }` returns `{ accessToken, tokenType, expiresIn, refreshToken }`                                     |
+| `POST /auth/refresh`  | `{ refreshToken }` returns a new access token **and a new refresh token**                                               |
+| `POST /auth/logout`   | `{ refreshToken }` ends that session; always `204`                                                                      |
+| `GET /auth/me`        | Needs `Authorization: Bearer <accessToken>`; returns `{ customer }`                                                     |
+| `POST /bookings`      | Auth. `{ providerId, serviceId, startsAt }` (ISO with offset, future) holds the slot; `201 { booking }`, `409` if taken |
+| `GET /bookings`       | Auth. Your own bookings only, soonest first: `{ bookings }`                                                             |
 
 ```sh
 curl -X POST localhost:3000/auth/register -H 'content-type: application/json' \

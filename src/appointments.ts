@@ -32,7 +32,7 @@ export function pickSlot(input: SlotInput): SlotInput {
 
 // The database constraint is the real guard. This recognises its error however
 // the driver wraps it (SQLSTATE 23P01 = exclusion_violation).
-function isOverlapError(err: unknown): boolean {
+export function isOverlapError(err: unknown): boolean {
   for (let e: unknown = err, depth = 0; e && depth < 5; depth++) {
     const text = JSON.stringify(e, Object.getOwnPropertyNames(Object(e)));
     if (text.includes('appointment_no_overlap') || text.includes('23P01')) return true;

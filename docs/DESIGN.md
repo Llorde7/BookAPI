@@ -9,9 +9,9 @@ file says why. The last section lists what is weak or missing, in one place.
 - **Built and tested:** accounts and login (register, login, refresh, logout, `/auth/me`),
   the data model, double-booking protection, unpaid holds, and authorize-then-capture
   payments against a dummy provider.
-- **Not built:** there are **no booking routes**. The only HTTP endpoints are `/health` and
-  the `/auth/*` routes. Holds, payments and slot protection exist as tested functions
-  (`src/appointments.ts`, `src/payments/service.ts`) that nothing calls over HTTP yet.
+- **Built, partly:** `POST /bookings` and `GET /bookings` (`src/bookings/`). Payments and
+  confirmation exist as tested functions (`src/payments/service.ts`) that nothing calls over
+  HTTP yet.
 - **Purpose:** this is a learning project, so some choices (a dummy payment provider, tokens
   in the JSON body) favour clarity over production hardening. Those are marked below.
 
@@ -215,7 +215,14 @@ bypasses. Several security features were also broken on purpose, by hand, to con
 
 Ordered roughly by how much they matter.
 
-1. **No booking routes.** Nothing exposes holds, payments or availability over HTTP.
+1. **Only create and list exist over HTTP.** No payment, confirm, cancel or availability
+   endpoint. `GET /bookings` is not paginated.
+   `POST /bookings` is a deliberate check-then-insert with no transaction or lock (the
+   rejected design in section 1). Concurrent requests for one slot both pass the check; the
+   `appointment_no_overlap` constraint rejects all but one and the API returns 409, so no
+   double booking, but it relies entirely on that constraint and on `isOverlapError`
+   recognising the driver's error. It also does not use `bumpUnpaidHolds`, so an unpaid hold
+   is never taken over by a later request.
 2. **Not verified on Docker.** Everything was run on local PostgreSQL 16, not on the
    `postgres:17-alpine` container in `docker-compose.yml`.
 3. **No working hours, days off, or provider-to-service link.** Any time can be booked, and
